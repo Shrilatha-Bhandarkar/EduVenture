@@ -4,9 +4,11 @@
 <head>
     <title>Examples</title>
     <meta charset="UTF-8">
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.0/dist/aframe-extras.min.js"></script>
     <link href="mystyles.css" rel="stylesheet" type="text/css">
-    <script src="../three.min.js"></script>
-    <script src="../dat.gui.min.js"></script>
+    <script src="../files/three.min.js"></script>
+    <script src="../files/dat.gui.min.js"></script>
     <script src="globals.js"></script>
     <script src="partsfunctions.js"></script>
     <script src="mousefunctions.js"></script>
@@ -15,19 +17,31 @@
 </head>
 
 <body>
-    <!--set up the HTML page-->
-    <canvas id="can1"></canvas>
-    <div id="div1">
+    <a-scene vr-mode-ui="enabled: true" arjs="sourceType: webcam; debugUIEnabled: false;"  embedded style="height: 100vh; width: 100vw; margin: 0; overflow: hidden;">
+       
+        <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls>
+            <a-entity cursor="fuse: false; rayOrigin: mouse" raycaster="objects: .selectable; far: 100;"></a-entity>
+        </a-camera>
+        <a-cursor></a-cursor>
+        
+         <a-light type="ambient" color="#FFFFFF" intensity="0.5"></a-light>
+         <a-light type="directional" position="0 2 0" intensity="1"></a-light>
+         <a-entity id="threejs-container"></a-entity>
+         <canvas id="can1" style="position: fixed; top: 0; left: 0; z-index: 1;"></canvas>
+    <div id="div1" style="position: fixed; z-index: 2; top: 10px; left: 10px; background: transparent; padding: 0; margin: 0;">
         <button id="b0">Drag objects</button>
         <button id="b1">Adjust post height</button>
         <button id="b2">Rotate postholder</button>
         <button id="b3">Tilt mirror</button>
     </div>
+    
+</a-scene>
+
 
 
     <script>
         "use strict";
-        //set a flag if a button is clicked
+        //buttons
         const button = new Array(4);
         button[0] = document.querySelector('#b0');
         button[1] = document.querySelector('#b1');
@@ -52,7 +66,6 @@
         const canvas = document.querySelector('#can1');
         const div1 = document.querySelector('#div1');
 
-        //set up the gui controls
         let beamradius = 0.25;
         let snap = true;
         const guicontrols = new function () {
@@ -60,20 +73,27 @@
             this.snap_to_grid = snap;
 
         };
-        const gui = new dat.GUI({ autoPlace: false });
+        const gui = new dat.GUI({ autoPlace: false }); 
+        gui.domElement.style.position = "absolute";  
+        gui.domElement.style.top = "10px";          
+        gui.domElement.style.right = "10px";         
+        gui.domElement.style.left = "";              
+        gui.domElement.style.zIndex = "1000";       
+        gui.domElement.style.background = "transparent"; 
+
         let gui1 = gui.add(guicontrols, 'laser_radius', 0.1, 0.3).name('Beam radius');
         let gui2 = gui.add(guicontrols, 'snap_to_grid').name('Snap to grid');
 
-        //place the gui controls
-        gui.domElement.style.cssFloat = "right";
-        div1.appendChild(gui.domElement);
+        document.body.appendChild(gui.domElement);
 
-        //set up a scene
-        const renderer = new THREE.WebGLRenderer({ canvas });
-        renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+        const renderer = new THREE.WebGLRenderer({ canvas,alpha: true  });
+        renderer.xr.enabled = true; 
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xdeb887);
-        //position the camera
+        
         const camera = new THREE.PerspectiveCamera(27, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
         let cr = 65;
         let cth = 1.3;
@@ -85,40 +105,66 @@
         scene.add(camera);
         window.addEventListener("resize", resizeRendererToDisplaySize);
 
-        //add a laser with beam expander to the scene
+        renderer.xr.enabled = true;
+
+        function resizeRenderer() {
+            const canvas = renderer.domElement;
+
+         const width = window.innerWidth;
+         const height = window.innerHeight;
+
+            renderer.setSize(width, height);
+         camera.aspect = width / height;
+         camera.updateProjectionMatrix();
+        }
+
+        window.addEventListener('resize', resizeRenderer);
+
+        renderer.xr.addEventListener('sessionstart', () => {
+          console.log('Entering VR mode');
+          resizeRenderer(); 
+        });
+
+        renderer.xr.addEventListener('sessionend', () => {
+           console.log('Exiting VR mode');
+          resizeRenderer(); 
+        });
+
+        resizeRenderer();
+
+        document.querySelector('a-scene').appendChild(renderer.domElement);
+
         const laser = makeLaser();
-        laser.position.x = -0.5;
-        laser.position.z = 25;
+        laser.position.set(-0.5, 0, 25);
         const extender = makeBeamextender();
         const beamexit = makeBeamexit();
         extender.add(beamexit);
         laser.add(extender);
         scene.add(laser);
 
-        //the world will hold all the objects to be moved
-        //add the ground to the world
         const ground = makeBoard();
         ground.rotation.x = -Math.PI * 0.5;
         const world = new THREE.Object3D();
         world.add(ground);
 
-        //make 5 bases, the bottoms of the bases are at y = 0
+
+        const container = document.querySelector("#threejs-container");
+        const scene1 = container.object3D; 
+
+        scene1.add(world);
         for (let i = 0; i < 2; i++) {
             base[i] = makeBase(15.5 - i * 5, -15.5);
-        } //bases for viewer and screen
+        } 
 
         for (let i = 2; i < 4; i++) {
             base[i] = makeBase(-15.5, -15.5 + i * 5);
-        } //bases for mirrors
+        }
 
-        base[4] = makeBase(-0.5, 10.5);  //base for glass block
-
-        // make postholders, the postholder positions are y = 0
+        base[4] = makeBase(-0.5, 10.5);
         for (let i = 1; i < elements; i++) {
             posthold[i] = makePostholder();
-        } //all elements except viewer have the same postholders
+        } 
 
-        //add the mirrorholders and mirrors to postholder
         for (let i = 2; i < 4; i++) {
             mirrorholder[i] = makeMirrorholder();
         }
@@ -135,15 +181,13 @@
             posthold[i].add(mirrorholder[i]);
         }
 
-        //add the screenholder and screen to postholder
         const screen = makeScreen();
         const screenholder = makeScreenholder();
-        screen.position.y = 4.2;  //middle of screen is 4.2 units above bottom of screenholder
+        screen.position.y = 4.2;  
         screen.position.z = -0.1;
         screenholder.add(screen);
         posthold[1].add(screenholder);
 
-        //add the holder and glass block to postholder
         const glassblock = makeglass();
         const glassholder = makeScreenholder();
         glassblock.position.y = 4;
@@ -151,13 +195,11 @@
         glassholder.position.y = 0.25;
         posthold[4].add(glassholder);
 
-        //add the angle scales to the postholders and the postholders to the bases
         for (let i = 1; i < elements; i++) {
             posthold[i].add(angle[i]);
             base[i].add(posthold[i]);
         }
 
-        //the viewer has a different holder
         const beamview = makeViewerpostholder();
         const viewpost = makeViewerpost();
         const viewer = makeViewer();
@@ -166,42 +208,76 @@
         beamview.add(angle[0]);
         base[0].add(beamview);
 
-        //finally, add the bases to the world and the world to the scene
         for (let i = 0; i < elements; i++) {
             world.add(base[i]);
             baseangle[i] = 0;
         }
         scene.add(world);
 
-        //how to respond to mouse events, respond to wheel and mousedown
         canvas.addEventListener("wheel", doWheel);
         canvas.addEventListener("pointerdown", doMouseDown);
+        AFRAME.registerComponent('vr-interaction', {
+         init: function () {
+        this.el.addEventListener('raycaster-intersected', (evt) => {
+            console.log('Raycaster intersected with:', evt.detail.intersectedEl);
+        });
 
-        //track the laser beam as it encouters the optical elements
+        this.el.addEventListener('raycaster-intersected-cleared', (evt) => {
+            console.log('Raycaster cleared intersection with:', evt.detail.clearedEl);
+        });
+
+        this.el.addEventListener('click', () => {
+            console.log('Clicked on:', this.el);
+        });
+         }
+        });
+        const selectableObjects = document.querySelectorAll('.selectable');
+        selectableObjects.forEach((obj) => {
+             obj.setAttribute('vr-interaction', '');
+        });
+            
         laserhit();
 
-        //render the scene
         render();
 
         function render() {
-            renderer.render(scene, camera);
+            renderer.setAnimationLoop(() => {
+                renderer.render(scene, camera);
+            });
         }
-
+            
 
         function resizeRendererToDisplaySize() {
-            camera.aspect = canvas.clientWidth / canvas.clientHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
-            renderer.render(scene, camera);
+            const canvasWidth = canvas.clientWidth;
+           const canvasHeight = canvas.clientHeight;
+
+           camera.aspect = canvasWidth / canvasHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(canvasWidth, canvasHeight, false);
+          renderer.render(scene, camera);
         }
 
         gui1.onFinishChange(function (value) {
             beamradius = 1 * value;
             laserhit();
+            console.log('Beam radius updated:', beamradius);
         });
+
         gui2.onFinishChange(function (value) {
-            snap = value;
+           snap = value;
+           console.log('Snap to grid updated:', snap);
         });
+        const sceneEl = document.querySelector('a-scene');
+        sceneEl.addEventListener('enter-ar', () => {
+            console.log('Entered AR mode');
+            render();
+        });
+
+        sceneEl.addEventListener('exit-ar', () => {
+            console.log('Exited AR mode');
+        });
+
+        render();
     </script>
 </body>
 
